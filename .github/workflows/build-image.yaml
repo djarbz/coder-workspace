@@ -1,4 +1,4 @@
-name: Dynamically Build Image
+name: Build all workspace images
 
 on:
   workflow_dispatch:
@@ -29,7 +29,7 @@ jobs:
           dockerfile: containerfile
 
   build:
-    name: Build Container Image
+    name: Build Image
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}:runner-ubi-9
