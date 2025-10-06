@@ -84,7 +84,7 @@ jobs:
         uses: redhat-actions/buildah-build@v2
         with:
           tags: ${{ steps.meta.outputs.tags }}
-          containerfiles: ${{ inputs.containerfile }}
+          containerfiles: containerfile
           build-args: |
             ${{ format('ENV_FLAVOR={0}', matrix.flavor) || '' }}
 
