@@ -23,7 +23,7 @@ curl -SsL "https://github.com/koalaman/shellcheck/releases/download/stable/shell
 EORUN
 
 # Set the Timezone
-RUN ln -s /usr/share/zoneinfo/America/Chicago /etc/localtime
+RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 
 RUN chown -R /home/coder
 USER coder
