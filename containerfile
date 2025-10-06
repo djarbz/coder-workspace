@@ -25,5 +25,5 @@ EORUN
 # Set the Timezone
 RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 
-RUN chown -R /home/coder
+RUN chown -R coder /home/coder
 USER coder
