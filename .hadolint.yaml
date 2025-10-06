@@ -1,5 +1,6 @@
 ignored:
-  - DL3041 # warning: Specify version with `dnf install -y <package>-<version>`.
-  - DL3059 # info: Multiple consecutive `RUN` instructions. Consider consolidation.
   - DL3002 # warning: Last USER should not be root.
   - DL3007 # warning: Using latest is prone to errors if the image will ever update. Pin the version explicitly to a release tag.
+  - DL3008 # warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
+  - DL3041 # warning: Specify version with `dnf install -y <package>-<version>`.
+  - DL3059 # info: Multiple consecutive `RUN` instructions. Consider consolidation.
