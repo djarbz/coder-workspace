@@ -13,7 +13,8 @@ RUN <<EORUN
 apt-get update
 apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
 tzdata \
-xz-utils
+xz-utils \
+bash-completion
 rm -rf /var/lib/apt/lists/*
 EORUN
 
