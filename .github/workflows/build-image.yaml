@@ -8,6 +8,8 @@ on:
     branches:
       - main
     paths:
+      - "*"
+      # Exclude
       - "!.github/workflows/build-image-ubi.yaml"
       - "!ubi.containerfile"
 
