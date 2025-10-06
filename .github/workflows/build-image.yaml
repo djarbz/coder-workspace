@@ -1,0 +1,93 @@
+name: Dynamically Build Image
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "35 4 * * 0" # WINTER (CST): 10:35PM  Summer (CDT): 11:35PM on SUNDAY
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    name: General sanity check on environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: lint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: containerfile
+
+  build:
+    name: Build Container Image
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:runner-ubi-9
+      # Volume mount to workaround for https://github.com/redhat-actions/podman-login/issues/42 since the docker config from the host doesn't come up to the container
+      options: --privileged -v /opt/:/host/opt/:rw -v /github/home/.docker/:/github/home/.docker/:rw
+    needs: lint
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        flavor:
+          - base
+          - desktop
+          - node
+          - golang
+
+    steps:
+      - name: Clone the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to the GitHub Container registry
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ghcr.io/${{ github.repository }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          # https://github.com/redhat-actions/podman-login/issues/41
+          auth_file_path: "/run/containers/0/auth.json"
+
+        # Based on https://github.com/orgs/community/discussions/25678
+      - name: Free up disk space on runner
+        run: |
+          rm -rf /host/opt/hostedtoolcache
+          df -Th
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+          # Tags: FLAVOR FLAVOR-latest FLAVOR-YYMMDD FLAVOR-SHA
+          tags: |
+            type=raw,value=${{ matrix.flavor }},enable={{is_default_branch}}
+            type=raw,value=${{ matrix.flavor }}-latest,enable={{is_default_branch}}
+            type=schedule,prefix=${{ matrix.flavor }},pattern={{date 'YYYYMMDD' tz='America/Chicago'}},enable={{is_default_branch}}
+            type=sha,prefix=${{ matrix.flavor }}-
+
+      - name: Use buildah build to create the image
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          tags: ${{ steps.meta.outputs.tags }}
+          containerfiles: ${{ inputs.containerfile }}
+          build-args: |
+            ${{ format('ENV_FLAVOR={0}', matrix.flavor) || '' }}
+
+      - name: Push to GitHub Container Repository
+        id: push-to-ghcr
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
