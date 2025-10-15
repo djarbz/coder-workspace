@@ -8,6 +8,8 @@ FROM alpine:3.20 AS builder
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 # Install curl for downloading and jq for parsing JSON from the GitHub API
+# warning: Pin versions in apk add. Instead of `apk add <package>` use `apk add <package>=<version>`
+# hadolint ignore=DL3018
 RUN apk add --no-cache curl jq
 
 # Set target OS and architecture as build arguments for flexibility
