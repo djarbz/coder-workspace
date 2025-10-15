@@ -1,6 +1,57 @@
 # Choose from: base, desktop, node, golang
 # See https://hub.docker.com/u/codercom for options
 ARG ENV_FLAVOR=base
+
+# STAGE 1: Builder
+# This stage discovers the latest shfmt version, downloads it, and makes it executable.
+FROM alpine:3.20 AS builder
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+
+# Install curl for downloading and jq for parsing JSON from the GitHub API
+RUN apk add --no-cache curl jq
+
+# Set target OS and architecture as build arguments for flexibility
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+# This RUN command is a multi-line script to perform all the necessary steps
+RUN <<EORUN
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
+# Discover the latest release tag from the mvdan/sh GitHub repository
+# The tag will be in a format like "v3.8.0"
+LATEST_TAG=$(curl -sL "https://api.github.com/repos/mvdan/sh/releases/latest" | jq -r ".tag_name")
+
+# Check if the tag was successfully fetched
+if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+  echo "Error: Could not fetch the latest release tag from GitHub."
+  exit 1
+fi
+
+echo "Discovered latest shfmt version: ${LATEST_TAG}"
+
+# Construct the binary name and the full download URL
+BINARY_NAME="shfmt_${LATEST_TAG}_${TARGETOS}_${TARGETARCH}"
+DOWNLOAD_URL="https://github.com/mvdan/sh/releases/download/${LATEST_TAG}/${BINARY_NAME}"
+
+echo "Downloading from ${DOWNLOAD_URL}"
+
+# Download the binary using curl, placing it directly in /usr/local/bin/
+# The -L flag follows redirects
+curl -sLo /usr/local/bin/shfmt "${DOWNLOAD_URL}"
+
+# Make the downloaded binary executable
+chmod +x /usr/local/bin/shfmt
+
+
+# (Optional) Verify the installation by printing the version
+echo "shfmt installation complete:"
+shfmt --version
+EORUN
+
+
+# STAGE 2: Final Image
 FROM docker.io/codercom/enterprise-${ENV_FLAVOR}:ubuntu
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
@@ -23,6 +74,8 @@ RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 
 USER coder
 ENV BIN_DIR=/home/coder/.local/bin
+
+COPY --chown=coder:coder --from=builder /usr/local/bin/shfmt "${BIN_DIR}/shfmt"
 
 RUN <<EORUN
 mkdir -p ${BIN_DIR}
