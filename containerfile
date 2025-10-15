@@ -74,10 +74,10 @@ EORUN
 # Set the Timezone
 RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 
+COPY --chown=coder:coder --from=builder /usr/local/bin/shfmt /usr/local/bin/shfmt
+
 USER coder
 ENV BIN_DIR=/home/coder/.local/bin
-
-COPY --chown=coder:coder --from=builder /usr/local/bin/shfmt "${BIN_DIR}/shfmt"
 
 RUN <<EORUN
 mkdir -p ${BIN_DIR}
