@@ -8,16 +8,14 @@ on:
     branches:
       - main
     paths:
-      - "*"
-      # Exclude
-      - "!.github/workflows/build-image-ubi.yaml"
-      - "!ubi.containerfile"
+      - ".github/workflows/build-image.yaml"
+      - "containerfile"
 
 jobs:
   lint:
     name: General sanity check on environment
-    #runs-on: ubuntu-latest
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
+    #runs-on: [self-hosted, linux]
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
@@ -31,10 +29,10 @@ jobs:
 
   build:
     name: Build Image
-    #runs-on: ubuntu-latest
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
+    #runs-on: [self-hosted, linux]
     container:
-      image: ghcr.io/${{ github.repository }}:runner-ubi-9
+      image: ghcr.io/djarbz/ubi-podman:latest
       # Volume mount to workaround for https://github.com/redhat-actions/podman-login/issues/42 since the docker config from the host doesn't come up to the container
       options: --privileged -v /opt/:/host/opt/:rw -v /github/home/.docker/:/github/home/.docker/:rw
     needs: lint
@@ -70,7 +68,7 @@ jobs:
           rm -rf /host/opt/hostedtoolcache
           df -Th
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata (tags, labels) for Container Image
         id: meta
         uses: docker/metadata-action@v5
         with:
