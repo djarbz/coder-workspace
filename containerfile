@@ -86,7 +86,10 @@ RUN curl -fsSL -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/i
 # info: Not following: File not included in mock.
 # hadolint ignore=SC1091
 RUN source ${NVM_DIR}/nvm.sh \
-    && nvm install --lts --latest-npm
+    && nvm install --lts --latest-npm\
+    # Find the paths to node and npm using 'which' and link them
+    && ln -s "$(which node)" /usr/local/bin/node \
+    && ln -s "$(which npm)" /usr/local/bin/npm
 
 # Install Node Tooling
 # warning: Pin versions in npm. Instead of `npm install <package>` use `npm install <package>@<version>`
