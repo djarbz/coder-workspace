@@ -84,7 +84,7 @@ ENV NVM_DIR=/usr/local/nvm
 RUN mkdir -p "${NVM_DIR}"
 RUN curl -fsSL -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash
 # info: Not following: File not included in mock.
-# shellcheck disable=SC1091
+# hadolint ignore=SC1091
 RUN source ${NVM_DIR}/nvm.sh \
     && nvm install --lts --latest-npm
 
