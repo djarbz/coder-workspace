@@ -67,7 +67,9 @@ apt-get update
 apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
 tzdata \
 xz-utils \
-bash-completion
+bash-completion \
+gnupg \
+software-properties-common
 rm -rf /var/lib/apt/lists/*
 EORUN
 
@@ -76,10 +78,42 @@ RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 
 COPY --chown=coder:coder --from=builder /usr/local/bin/shfmt /usr/local/bin/shfmt
 
+# Install NVM and Node
+ENV NVM_VERSION=v0.40.3
+ENV NVM_DIR=/usr/local/nvm
+RUN mkdir -p "${NVM_DIR}"
+RUN curl -fsSL -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash
+# install node and npm
+RUN source ${NVM_DIR}/nvm.sh \
+    && nvm install --lts --latest-npm
+
+# Install Node Tooling
+RUN npm install -g bun prettier
+
+# Install Terraform
+RUN <<EORUN
+curl -fsSL https://apt.releases.hashicorp.com/gpg \
+  | gpg --dearmor \
+  | tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+gpg --no-default-keyring \
+  --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+  --fingerprint
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+EORUN
+# warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
+# hadolint ignore=DL3008
+RUN <<EORUN
+apt-get update
+apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
+terraform
+rm -rf /var/lib/apt/lists/*
+EORUN
+
 USER coder
 ENV BIN_DIR=/home/coder/.local/bin
 
+# Install Shellcheck
 RUN <<EORUN
 mkdir -p ${BIN_DIR}
-curl -SsL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJvf - -C "${BIN_DIR}/" --strip-components=1 --wildcards '*/shellcheck'
+curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJvf - -C "${BIN_DIR}/" --strip-components=1 --wildcards '*/shellcheck'
 EORUN
