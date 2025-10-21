@@ -4,7 +4,7 @@ ARG ENV_FLAVOR=base
 
 # STAGE 1: Builder
 # This stage discovers the latest shfmt version, downloads it, and makes it executable.
-FROM alpine:3.20 AS builder
+FROM docker.io/library/alpine:3.20 AS builder
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 # Install curl for downloading and jq for parsing JSON from the GitHub API
