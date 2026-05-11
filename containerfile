@@ -54,10 +54,14 @@ EORUN
 
 
 # STAGE 2: Final Image
+# This is a development container, so we often prefer lastest versions of the packages.
 FROM docker.io/codercom/enterprise-${ENV_FLAVOR}:ubuntu
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
 USER root
+
+# Avoid prompts from apt during build
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install baseline packages
 # warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
@@ -70,6 +74,19 @@ xz-utils \
 bash-completion \
 gnupg \
 software-properties-common
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EORUN
+
+# Install Python from the Deadsnakes PPA
+RUN <<EORUN
+add-apt-repository ppa:deadsnakes/ppa
+apt-get update
+apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
+python3.15 \
+python3.15-venv \
+python3.15-dev
+apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
 
@@ -79,7 +96,7 @@ RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 COPY --chown=coder:coder --from=builder /usr/local/bin/shfmt /usr/local/bin/shfmt
 
 # Install NVM and Node
-ENV NVM_VERSION=v0.40.3
+ENV NVM_VERSION=v0.40.4
 ENV NVM_DIR=/usr/local/nvm
 RUN mkdir -p "${NVM_DIR}"
 RUN curl -fsSL -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash
@@ -113,6 +130,7 @@ RUN <<EORUN
 apt-get update
 apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
 terraform
+apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
 
