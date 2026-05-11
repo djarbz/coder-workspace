@@ -77,26 +77,28 @@ jobs:
             type=schedule,prefix=${{ matrix.flavor }},pattern={{date 'YYYYMMDD' tz='America/Chicago'}},enable={{is_default_branch}}
             type=sha,prefix=${{ matrix.flavor }}-
 
-      # Replacing redhat-actions/buildah-build
+      # Replacing redhat-actions/buildah-build and use the `docker format` to support the SHELL instruction.
       - name: Build Image with Buildah
         run: |
-          # Convert tags from metadata-action into buildah arguments
-          TAGS=(${{ steps.meta.outputs.tags }})
-          FIRST_TAG=${TAGS[0]}
+          # Grab the first tag to use as the primary build tag
+          PRIMARY_TAG=$(echo '${{ steps.meta.outputs.json }}' | jq -r '.tags[0]')
 
           buildah bud \
+            --format docker \
             --build-arg ENV_FLAVOR=${{ matrix.flavor }} \
             --file containerfile \
-            --tag "$FIRST_TAG" .
+            --tag "$PRIMARY_TAG" .
 
-          # Add extra tags to the local image
-          for TAG in "${TAGS[@]:1}"; do
-            buildah tag "$FIRST_TAG" "$TAG"
+          # Apply the rest of the tags locally
+          for TAG in $(echo '${{ steps.meta.outputs.json }}' | jq -r '.tags[]'); do
+            buildah tag "$PRIMARY_TAG" "$TAG"
           done
 
       # Replacing redhat-actions/push-to-registry
       - name: Push to GHCR
         run: |
-          for TAG in ${{ steps.meta.outputs.tags }}; do
+          # Use the JSON output to iterate cleanly
+          for TAG in $(echo '${{ steps.meta.outputs.json }}' | jq -r '.tags[]'); do
+            echo "Pushing $TAG..."
             buildah push "$TAG"
           done
