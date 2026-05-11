@@ -18,7 +18,7 @@ jobs:
     #runs-on: [self-hosted, linux]
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -53,14 +53,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Log in to the GitHub Container registry
-        uses: redhat-actions/podman-login@v1
-        with:
-          registry: ghcr.io/${{ github.repository }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-          # https://github.com/redhat-actions/podman-login/issues/41
-          auth_file_path: "/run/containers/0/auth.json"
+      # Replacing redhat-actions/podman-login
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
         # Based on https://github.com/orgs/community/discussions/25678
       - name: Free up disk space on runner
@@ -70,7 +66,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Container Image
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ghcr.io/${{ github.repository }}
@@ -81,18 +77,26 @@ jobs:
             type=schedule,prefix=${{ matrix.flavor }},pattern={{date 'YYYYMMDD' tz='America/Chicago'}},enable={{is_default_branch}}
             type=sha,prefix=${{ matrix.flavor }}-
 
-      - name: Use buildah build to create the image
-        id: build-image
-        uses: redhat-actions/buildah-build@v2
-        with:
-          tags: ${{ steps.meta.outputs.tags }}
-          containerfiles: containerfile
-          build-args: |
-            ${{ format('ENV_FLAVOR={0}', matrix.flavor) || '' }}
+      # Replacing redhat-actions/buildah-build
+      - name: Build Image with Buildah
+        run: |
+          # Convert tags from metadata-action into buildah arguments
+          TAGS=(${{ steps.meta.outputs.tags }})
+          FIRST_TAG=${TAGS[0]}
 
-      - name: Push to GitHub Container Repository
-        id: push-to-ghcr
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
+          buildah bud \
+            --build-arg ENV_FLAVOR=${{ matrix.flavor }} \
+            --file containerfile \
+            --tag "$FIRST_TAG" .
+
+          # Add extra tags to the local image
+          for TAG in "${TAGS[@]:1}"; do
+            buildah tag "$FIRST_TAG" "$TAG"
+          done
+
+      # Replacing redhat-actions/push-to-registry
+      - name: Push to GHCR
+        run: |
+          for TAG in ${{ steps.meta.outputs.tags }}; do
+            buildah push "$TAG"
+          done
