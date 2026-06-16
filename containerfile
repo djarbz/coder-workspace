@@ -2,59 +2,7 @@
 # See https://hub.docker.com/u/codercom for options
 ARG ENV_FLAVOR=base
 
-# STAGE 1: Builder
-# This stage discovers the latest shfmt version, downloads it, and makes it executable.
-FROM docker.io/library/alpine:3.20 AS builder
-SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
-
-# Install curl for downloading and jq for parsing JSON from the GitHub API
-# warning: Pin versions in apk add. Instead of `apk add <package>` use `apk add <package>=<version>`
-# hadolint ignore=DL3018
-RUN apk add --no-cache curl jq
-
-# Set target OS and architecture as build arguments for flexibility
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
-
-# This RUN command is a multi-line script to perform all the necessary steps
-RUN <<EORUN
-# Exit immediately if a command exits with a non-zero status.
-set -e
-
-# Discover the latest release tag from the mvdan/sh GitHub repository
-# The tag will be in a format like "v3.8.0"
-LATEST_TAG=$(curl -sL "https://api.github.com/repos/mvdan/sh/releases/latest" | jq -r ".tag_name")
-
-# Check if the tag was successfully fetched
-if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
-  echo "Error: Could not fetch the latest release tag from GitHub."
-  exit 1
-fi
-
-echo "Discovered latest shfmt version: ${LATEST_TAG}"
-
-# Construct the binary name and the full download URL
-BINARY_NAME="shfmt_${LATEST_TAG}_${TARGETOS}_${TARGETARCH}"
-DOWNLOAD_URL="https://github.com/mvdan/sh/releases/download/${LATEST_TAG}/${BINARY_NAME}"
-
-echo "Downloading from ${DOWNLOAD_URL}"
-
-# Download the binary using curl, placing it directly in /usr/local/bin/
-# The -L flag follows redirects
-curl -sLo /usr/local/bin/shfmt "${DOWNLOAD_URL}"
-
-# Make the downloaded binary executable
-chmod +x /usr/local/bin/shfmt
-
-
-# (Optional) Verify the installation by printing the version
-echo "shfmt installation complete:"
-shfmt --version
-EORUN
-
-
-# STAGE 2: Final Image
-# This is a development container, so we often prefer lastest versions of the packages.
+# This is a development container, so we often prefer latest versions of the packages.
 FROM docker.io/codercom/enterprise-${ENV_FLAVOR}:ubuntu
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
@@ -63,7 +11,21 @@ USER root
 # Avoid prompts from apt during build
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install baseline packages
+# Set the Timezone
+RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
+
+# ==========================================
+# 1. Install Standalone Binaries via COPY
+# ==========================================
+COPY --chown=coder:coder --from=ghcr.io/hadolint/hadolint:latest /bin/hadolint /usr/local/bin/hadolint
+COPY --chown=coder:coder --from=mvdan/shfmt:latest /bin/shfmt /usr/local/bin/shfmt
+COPY --chown=coder:coder --from=koalaman/shellcheck:stable /bin/shellcheck /usr/local/bin/shellcheck
+COPY --chown=coder:coder --from=hashicorp/terraform:latest /bin/terraform /usr/local/bin/terraform
+COPY --chown=coder:coder --from=oven/bun:latest /usr/local/bin/bun /usr/local/bin/bun
+
+# ==========================================
+# 2. Install Baseline System Packages
+# ==========================================
 # warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
 # hadolint ignore=DL3008
 RUN <<EORUN
@@ -78,7 +40,9 @@ apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
 
-# Install Python from the Deadsnakes PPA
+# ==========================================
+# 3. Install Python from Deadsnakes PPA
+# ==========================================
 RUN <<EORUN
 add-apt-repository ppa:deadsnakes/ppa
 apt-get update
@@ -90,13 +54,52 @@ apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
 
-# Set the Timezone
-RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
+# ==========================================
+# Install PowerShell
+# ==========================================
+# warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
+# hadolint ignore=DL3008,SC1091
+RUN <<EORUN
+# Get the version of Ubuntu (provides $VERSION_ID)
+source /etc/os-release
 
-COPY --chown=coder:coder --from=builder /usr/local/bin/shfmt /usr/local/bin/shfmt
+# Download the Microsoft repository config using curl
+curl -sL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb"
 
-# Install NVM and Node
-ENV NVM_VERSION=v0.40.4
+# Register the Microsoft repository keys
+dpkg -i packages-microsoft-prod.deb
+rm packages-microsoft-prod.deb
+
+# Update the list of packages and install PowerShell
+apt-get update
+apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
+  powershell
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EORUN
+
+# ==========================================
+# Install PowerShell Modules
+# ==========================================
+# We pipe a heredoc directly into pwsh.
+# We use -Scope AllUsers so the 'coder' user can access them later.
+RUN pwsh -NoProfile -NonInteractive -Command - <<EOF
+\$ErrorActionPreference = 'Stop'
+\$ConfirmPreference = 'None'
+
+Write-Host "Trusting PSGallery..."
+Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
+
+Write-Host "Installing Modules..."
+# You can pass multiple modules to Install-Module in an array to speed up installation
+Install-Module -Name PSScriptAnalyzer, MilestonePSTools, powershell-yaml, PSFramework -Scope AllUsers -Force
+EOF
+
+# ==========================================
+# 4. Install NVM, Node, and Tooling
+# ==========================================
+ARG NVM_VERSION=v0.40.4
+ENV NVM_VERSION=${NVM_VERSION}
 ENV NVM_DIR=/usr/local/nvm
 RUN mkdir -p "${NVM_DIR}"
 RUN curl -fsSL -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash
@@ -112,34 +115,11 @@ EORUN
 # Install Node Tooling
 # warning: Pin versions in npm. Instead of `npm install <package>` use `npm install <package>@<version>`
 # hadolint ignore=DL3016
-RUN npm install -g bun prettier
+RUN npm install -g prettier
 
-# Install Terraform
-RUN <<EORUN
-curl -fsSL https://apt.releases.hashicorp.com/gpg \
-  | gpg --dearmor \
-  | tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
-gpg --no-default-keyring \
-  --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
-  --fingerprint
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
-EORUN
-
-# warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
-# hadolint ignore=DL3008
-RUN <<EORUN
-apt-get update
-apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
-terraform
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-EORUN
-
+# ==========================================
+# 5. Final Setup
+# ==========================================
 USER coder
 ENV BIN_DIR=/home/coder/.local/bin
-
-# Install Shellcheck
-RUN <<EORUN
-mkdir -p ${BIN_DIR}
-curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz" | tar -xJvf - -C "${BIN_DIR}/" --strip-components=1 --wildcards '*/shellcheck'
-EORUN
+RUN mkdir -p ${BIN_DIR}

@@ -58,7 +58,7 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
-        # Based on https://github.com/orgs/community/discussions/25678
+      # Based on https://github.com/orgs/community/discussions/25678
       - name: Free up disk space on runner
         run: |
           rm -rf /host/opt/hostedtoolcache
@@ -77,15 +77,33 @@ jobs:
             type=schedule,prefix=${{ matrix.flavor }},pattern={{date 'YYYYMMDD' tz='America/Chicago'}},enable={{is_default_branch}}
             type=sha,prefix=${{ matrix.flavor }}-
 
+      # NEW STEP: Dynamically fetch the latest NVM release tag
+      - name: Discover latest NVM version
+        id: nvm
+        run: |
+          LATEST_NVM_TAG=$(curl -sL "https://api.github.com/repos/nvm-sh/nvm/releases/latest" | jq -r ".tag_name")
+
+          if [ -z "$LATEST_NVM_TAG" ] || [ "$LATEST_NVM_TAG" = "null" ]; then
+            echo "Error: Could not fetch the latest release tag for NVM from GitHub."
+            exit 1
+          fi
+
+          echo "Discovered NVM version: $LATEST_NVM_TAG"
+
+          # Write to GitHub Actions outputs so the next step can use it
+          echo "version=$LATEST_NVM_TAG" >> "$GITHUB_OUTPUT"
+
       # Replacing redhat-actions/buildah-build and use the `docker format` to support the SHELL instruction.
       - name: Build Image with Buildah
         run: |
           # Grab the first tag to use as the primary build tag
           PRIMARY_TAG=$(echo '${{ steps.meta.outputs.json }}' | jq -r '.tags[0]')
 
+          # Added NVM_VERSION as a build argument
           buildah bud \
             --format docker \
             --build-arg ENV_FLAVOR=${{ matrix.flavor }} \
+            --build-arg NVM_VERSION=${{ steps.nvm.outputs.version }} \
             --file containerfile \
             --tag "$PRIMARY_TAG" .
 
