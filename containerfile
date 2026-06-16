@@ -18,10 +18,10 @@ RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 # 1. Install Standalone Binaries via COPY
 # ==========================================
 COPY --chown=coder:coder --from=ghcr.io/hadolint/hadolint:latest /bin/hadolint /usr/local/bin/hadolint
-COPY --chown=coder:coder --from=mvdan/shfmt:latest /bin/shfmt /usr/local/bin/shfmt
-COPY --chown=coder:coder --from=koalaman/shellcheck:stable /bin/shellcheck /usr/local/bin/shellcheck
-COPY --chown=coder:coder --from=hashicorp/terraform:latest /bin/terraform /usr/local/bin/terraform
-COPY --chown=coder:coder --from=oven/bun:latest /usr/local/bin/bun /usr/local/bin/bun
+COPY --chown=coder:coder --from=docker.io/mvdan/shfmt:latest /bin/shfmt /usr/local/bin/shfmt
+COPY --chown=coder:coder --from=docker.io/koalaman/shellcheck:stable /bin/shellcheck /usr/local/bin/shellcheck
+COPY --chown=coder:coder --from=docker.io/hashicorp/terraform:latest /bin/terraform /usr/local/bin/terraform
+COPY --chown=coder:coder --from=docker.io/oven/bun:latest /usr/local/bin/bun /usr/local/bin/bun
 
 # ==========================================
 # 2. Install Baseline System Packages
