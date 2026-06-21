@@ -56,9 +56,29 @@ rm -rf /var/lib/apt/lists/*
 EORUN
 
 # ==========================================
-# Install PowerShell Modules
+# Install PowerShell & Modules
 # ==========================================
-# We pipe a heredoc directly into pwsh.
+
+# 1. Install PowerShell Core via apt
+RUN <<EORUN
+# Get the version of Ubuntu (provides VERSION_ID)
+source /etc/os-release
+
+# Download the Microsoft repository config using curl
+curl -sL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/\${VERSION_ID}/packages-microsoft-prod.deb"
+
+# Register the Microsoft repository keys
+dpkg -i packages-microsoft-prod.deb
+rm packages-microsoft-prod.deb
+
+# Update the list of packages and install PowerShell
+apt-get update
+apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 powershell
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EORUN
+
+# 2. Configure PowerShell and Install Modules
 # We use -Scope AllUsers so the 'coder' user can access them later.
 RUN pwsh -NoProfile -NonInteractive -Command - <<EOF
 \$ErrorActionPreference = 'Stop'
@@ -75,9 +95,9 @@ if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "Installing Modules..."
-# You can pass multiple modules to Install-Module in an array to speed up installation
 Install-Module -Name PSScriptAnalyzer, MilestonePSTools, powershell-yaml, PSFramework -Scope AllUsers -Force
 EOF
+
 
 
 # ==========================================
