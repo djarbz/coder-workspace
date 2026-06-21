@@ -1,122 +1,87 @@
-name: Build all workspace images
+name: Build Coder Workspace Images
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "35 4 * * 0" # WINTER (CST): 10:35PM  Summer (CDT): 11:35PM on SUNDAY
   push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/build-image.yaml"
-      - "containerfile"
+    branches: [ "main" ]
+  # Allows you to trigger this workflow manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
-  lint:
-    name: General sanity check on environment
+  # ==========================================
+  # 1. Prepare Job (Runs Once)
+  # ==========================================
+  prepare:
+    name: Fetch Global Build Args
     runs-on: ubuntu-latest
-    #runs-on: [self-hosted, linux]
+    outputs:
+      nvm_version: ${{ steps.get-nvm.outputs.version }}
     steps:
-      - name: Check out the repo
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: lint
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: containerfile
-
-  build:
-    name: Build Image
-    runs-on: ubuntu-latest
-    #runs-on: [self-hosted, linux]
-    container:
-      image: ghcr.io/djarbz/ubi-podman:latest
-      # Volume mount to workaround for https://github.com/redhat-actions/podman-login/issues/42 since the docker config from the host doesn't come up to the container
-      options: --privileged -v /opt/:/host/opt/:rw -v /github/home/.docker/:/github/home/.docker/:rw
-    needs: lint
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        flavor:
-          - base
-          - desktop
-          - node
-          - golang
-
-    steps:
-      - name: Clone the repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      # Replacing redhat-actions/podman-login
-      - name: Log in to GHCR
+      - name: Get Latest NVM Tag
+        id: get-nvm
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      # Based on https://github.com/orgs/community/discussions/25678
-      - name: Free up disk space on runner
-        run: |
-          rm -rf /host/opt/hostedtoolcache
-          df -Th
-
-      - name: Extract metadata (tags, labels) for Container Image
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            ghcr.io/${{ github.repository }}
-          # Tags: FLAVOR FLAVOR-latest FLAVOR-YYMMDD FLAVOR-SHA
-          tags: |
-            type=raw,value=${{ matrix.flavor }},enable={{is_default_branch}}
-            type=raw,value=${{ matrix.flavor }}-latest,enable={{is_default_branch}}
-            type=schedule,prefix=${{ matrix.flavor }},pattern={{date 'YYYYMMDD' tz='America/Chicago'}},enable={{is_default_branch}}
-            type=sha,prefix=${{ matrix.flavor }}-
-
-      # NEW STEP: Dynamically fetch the latest NVM release tag
-      - name: Discover latest NVM version
-        id: nvm
-        run: |
-          LATEST_NVM_TAG=$(curl -sL "https://api.github.com/repos/nvm-sh/nvm/releases/latest" | jq -r ".tag_name")
-
-          if [ -z "$LATEST_NVM_TAG" ] || [ "$LATEST_NVM_TAG" = "null" ]; then
+          # Fetch once using the pre-installed GitHub CLI
+          LATEST_NVM_TAG=$(gh api repos/nvm-sh/nvm/releases/latest --jq '.tag_name')
+          
+          if [ -z "$LATEST_NVM_TAG" ]; then
             echo "Error: Could not fetch the latest release tag for NVM from GitHub."
             exit 1
           fi
-
+          
           echo "Discovered NVM version: $LATEST_NVM_TAG"
-
-          # Write to GitHub Actions outputs so the next step can use it
           echo "version=$LATEST_NVM_TAG" >> "$GITHUB_OUTPUT"
 
-      # Replacing redhat-actions/buildah-build and use the `docker format` to support the SHELL instruction.
-      - name: Build Image with Buildah
-        run: |
-          # Grab the first tag to use as the primary build tag
-          PRIMARY_TAG=$(echo '${{ steps.meta.outputs.json }}' | jq -r '.tags[0]')
+  # ==========================================
+  # 2. Build Matrix Job (Runs per flavor)
+  # ==========================================
+  build:
+    name: Build & Push
+    needs: prepare # Wait for the prepare job to finish
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [base, desktop, node, golang]
+        
+    # Grant permissions needed to push to GHCR
+    permissions:
+      contents: read
+      packages: write
 
-          # Added NVM_VERSION as a build argument
-          buildah bud \
-            --format docker \
-            --build-arg ENV_FLAVOR=${{ matrix.flavor }} \
-            --build-arg NVM_VERSION=${{ steps.nvm.outputs.version }} \
-            --file containerfile \
-            --tag "$PRIMARY_TAG" .
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-          # Apply the rest of the tags locally
-          for TAG in $(echo '${{ steps.meta.outputs.json }}' | jq -r '.tags[]'); do
-            buildah tag "$PRIMARY_TAG" "$TAG"
-          done
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # Replacing redhat-actions/push-to-registry
-      - name: Push to GHCR
-        run: |
-          # Use the JSON output to iterate cleanly
-          for TAG in $(echo '${{ steps.meta.outputs.json }}' | jq -r '.tags[]'); do
-            echo "Pushing $TAG..."
-            buildah push "$TAG"
-          done
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # Generate tags like: golang, golang-latest, golang-1bcd8af
+          tags: |
+            type=raw,value=${{ matrix.flavor }}
+            type=raw,value=${{ matrix.flavor }}-latest
+            type=sha,prefix=${{ matrix.flavor }}-
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: |
+            ENV_FLAVOR=${{ matrix.flavor }}
+            NVM_VERSION=${{ needs.prepare.outputs.nvm_version }}
