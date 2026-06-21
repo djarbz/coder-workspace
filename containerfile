@@ -35,7 +35,8 @@ tzdata \
 xz-utils \
 bash-completion \
 gnupg \
-software-properties-common
+software-properties-common \
+ripgrep
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
