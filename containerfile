@@ -34,6 +34,7 @@ apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-
 tzdata \
 xz-utils \
 bash-completion \
+curl \
 gnupg \
 software-properties-common \
 ripgrep
@@ -56,16 +57,19 @@ rm -rf /var/lib/apt/lists/*
 EORUN
 
 # ==========================================
-# Install PowerShell & Modules
+# 4. Install PowerShell & Modules
 # ==========================================
 
-# 1. Install PowerShell Core via apt
-RUN <<EORUN
-# Get the version of Ubuntu (provides VERSION_ID)
+# Install PowerShell Core via apt
+# hadolint ignore=DL3008,SC1091
+RUN <<"EORUN"
+# Get the version of Ubuntu and strip any quotes from the variable
 source /etc/os-release
+CLEAN_VERSION_ID="${VERSION_ID//\"/}"
 
 # Download the Microsoft repository config using curl
-curl -sL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/\${VERSION_ID}/packages-microsoft-prod.deb"
+# We use -f to fail immediately if the URL is incorrect (prevents bad .deb files)
+curl -sSfL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/${CLEAN_VERSION_ID}/packages-microsoft-prod.deb"
 
 # Register the Microsoft repository keys
 dpkg -i packages-microsoft-prod.deb
@@ -78,11 +82,11 @@ apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
 
-# 2. Configure PowerShell and Install Modules
+# Configure PowerShell and Install Modules
 # We use -Scope AllUsers so the 'coder' user can access them later.
-RUN pwsh -NoProfile -NonInteractive -Command - <<EOF
-\$ErrorActionPreference = 'Stop'
-\$ConfirmPreference = 'None'
+RUN pwsh -NoProfile -NonInteractive -Command - <<"EOF"
+$ErrorActionPreference = 'Stop'
+$ConfirmPreference = 'None'
 
 Write-Host "Installing NuGet package provider..."
 Install-PackageProvider -Name NuGet -Force -Scope AllUsers
@@ -98,33 +102,15 @@ Write-Host "Installing Modules..."
 Install-Module -Name PSScriptAnalyzer, MilestonePSTools, powershell-yaml, PSFramework -Scope AllUsers -Force
 EOF
 
-
-
 # ==========================================
-# Install PowerShell Modules
-# ==========================================
-# We pipe a heredoc directly into pwsh.
-# We use -Scope AllUsers so the 'coder' user can access them later.
-RUN pwsh -NoProfile -NonInteractive -Command - <<EOF
-\$ErrorActionPreference = 'Stop'
-\$ConfirmPreference = 'None'
-
-Write-Host "Trusting PSGallery..."
-Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted
-
-Write-Host "Installing Modules..."
-# You can pass multiple modules to Install-Module in an array to speed up installation
-Install-Module -Name PSScriptAnalyzer, MilestonePSTools, powershell-yaml, PSFramework -Scope AllUsers -Force
-EOF
-
-# ==========================================
-# 4. Install NVM, Node, and Tooling
+# 5. Install NVM, Node, and Tooling
 # ==========================================
 ARG NVM_VERSION=v0.40.4
 ENV NVM_VERSION=${NVM_VERSION}
 ENV NVM_DIR=/usr/local/nvm
 RUN mkdir -p "${NVM_DIR}"
 RUN curl -fsSL -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash
+
 # info: Not following: File not included in mock.
 # hadolint ignore=SC1091
 RUN <<EORUN
@@ -140,7 +126,7 @@ EORUN
 RUN npm install -g prettier
 
 # ==========================================
-# 5. Final Setup
+# 6. Final Setup
 # ==========================================
 USER coder
 ENV BIN_DIR=/home/coder/.local/bin
