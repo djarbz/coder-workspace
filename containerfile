@@ -56,28 +56,29 @@ rm -rf /var/lib/apt/lists/*
 EORUN
 
 # ==========================================
-# Install PowerShell
+# Install PowerShell Modules
 # ==========================================
-# warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
-# hadolint ignore=DL3008,SC1091
-RUN <<EORUN
-# Get the version of Ubuntu (provides $VERSION_ID)
-source /etc/os-release
+# We pipe a heredoc directly into pwsh.
+# We use -Scope AllUsers so the 'coder' user can access them later.
+RUN pwsh -NoProfile -NonInteractive -Command - <<EOF
+\$ErrorActionPreference = 'Stop'
+\$ConfirmPreference = 'None'
 
-# Download the Microsoft repository config using curl
-curl -sL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb"
+Write-Host "Installing NuGet package provider..."
+Install-PackageProvider -Name NuGet -Force -Scope AllUsers
 
-# Register the Microsoft repository keys
-dpkg -i packages-microsoft-prod.deb
-rm packages-microsoft-prod.deb
+Write-Host "Registering and Trusting PSGallery..."
+if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+    Register-PSRepository -Default -InstallationPolicy Trusted
+} else {
+    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+}
 
-# Update the list of packages and install PowerShell
-apt-get update
-apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
-  powershell
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-EORUN
+Write-Host "Installing Modules..."
+# You can pass multiple modules to Install-Module in an array to speed up installation
+Install-Module -Name PSScriptAnalyzer, MilestonePSTools, powershell-yaml, PSFramework -Scope AllUsers -Force
+EOF
+
 
 # ==========================================
 # Install PowerShell Modules
