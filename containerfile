@@ -37,7 +37,8 @@ bash-completion \
 curl \
 gnupg \
 software-properties-common \
-ripgrep
+ripgrep \
+tree
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
