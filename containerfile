@@ -29,6 +29,9 @@ COPY --chown=coder:coder --from=docker.io/oven/bun:latest /usr/local/bin/bun /us
 # warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
 # hadolint ignore=DL3008
 RUN <<EORUN
+# Remove the broken Yarn repo from the base image since we use NVM
+rm -f /etc/apt/sources.list.d/yarn.list
+
 apt-get update
 apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
 tzdata \
