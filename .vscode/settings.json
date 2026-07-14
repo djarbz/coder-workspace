@@ -1,5 +1,8 @@
 {
   "cSpell.words": [
-    "EORUN"
+    "EORUN",
+    "golangci",
+    "shellcheck",
+    "shfmt"
   ]
 }

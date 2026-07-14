@@ -47,61 +47,14 @@ apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-
   git
 apt-get clean
 rm -rf /var/lib/apt/lists/*
+
 EORUN
 
 # ==========================================
 # Bake Pre-commit Template into Image
 # ==========================================
-RUN mkdir -p /opt/coder/templates && cat <<'EOF' > /opt/coder/templates/.pre-commit-config.yaml
-repos:
-  # General/File System
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-added-large-files
-
-  # Python: Ruff (Formatting & Linting)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.8
-    hooks:
-      - id: ruff
-        args: [ --fix ]
-      - id: ruff-format
-
-  # Golang: golangci-lint
-  - repo: https://github.com/golangci/golangci-lint
-    rev: v1.59.0
-    hooks:
-      - id: golangci-lint
-
-  # Web/JSON/Markdown/YAML: Prettier
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
-    hooks:
-      - id: prettier
-        types_or: [javascript, typescript, css, html, json, markdown]
-
-  # Bash/Shell: shfmt & shellcheck
-  - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.8.0-1
-    hooks:
-      - id: shfmt
-        args: ["-w", "-s", "-i", "2"] # Write, simplify, indent 2 spaces
-  - repo: https://github.com/koalaman/shellcheck-precommit
-    rev: v0.10.0
-    hooks:
-      - id: shellcheck
-
-  # Docker: Hadolint
-  - repo: https://github.com/hadolint/hadolint
-    rev: v2.12.0
-    hooks:
-      - id: hadolint
-EOF
-RUN chown -R coder:coder /opt/coder/templates
+RUN mkdir -p /opt/coder/templates
+COPY --chown=coder:coder .pre-commit-config.yaml /opt/coder/templates/.pre-commit-config.yaml
 
 # ==========================================
 # Install Python & Tools using uv
@@ -114,7 +67,8 @@ RUN uv python install ${UV_PYTHON_VERSION}
 
 # Install pre-commit globally using uv tool
 ENV UV_TOOL_DIR=/opt/uv-tools
-RUN uv tool install pre-commit --install-dir /usr/local/bin
+ENV UV_TOOL_BIN_DIR=/usr/local/bin
+RUN uv tool install pre-commit
 
 # ==========================================
 # Install PowerShell & Modules
