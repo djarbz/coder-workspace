@@ -75,7 +75,7 @@ RUN uv tool install pre-commit
 # ==========================================
 RUN <<"EORUN"
 source /etc/os-release
-CLEAN_VERSION_ID="${VERSION_ID//"/}"
+CLEAN_VERSION_ID=$(echo "$VERSION_ID" | tr -d '"')
 curl -sSfL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/${CLEAN_VERSION_ID}/packages-microsoft-prod.deb"
 dpkg -i packages-microsoft-prod.deb
 rm packages-microsoft-prod.deb

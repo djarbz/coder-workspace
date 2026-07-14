@@ -1,8 +1,16 @@
 {
   "cSpell.words": [
+    "Dpkg",
     "EORUN",
     "golangci",
+    "koalaman",
+    "localtime",
+    "mvdan",
+    "noninteractive",
+    "pipefail",
     "shellcheck",
-    "shfmt"
+    "shfmt",
+    "tzdata",
+    "zoneinfo"
   ]
 }
