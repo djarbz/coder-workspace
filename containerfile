@@ -15,16 +15,18 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 
 # ==========================================
-# 1. Install Standalone Binaries via COPY
+# Install Standalone Binaries via COPY
 # ==========================================
 COPY --chown=coder:coder --from=ghcr.io/hadolint/hadolint:latest /bin/hadolint /usr/local/bin/hadolint
 COPY --chown=coder:coder --from=docker.io/mvdan/shfmt:latest /bin/shfmt /usr/local/bin/shfmt
 COPY --chown=coder:coder --from=docker.io/koalaman/shellcheck:stable /bin/shellcheck /usr/local/bin/shellcheck
 COPY --chown=coder:coder --from=docker.io/hashicorp/terraform:latest /bin/terraform /usr/local/bin/terraform
 COPY --chown=coder:coder --from=docker.io/oven/bun:latest /usr/local/bin/bun /usr/local/bin/bun
+COPY --chown=coder:coder --from=docker.io/golangci/golangci-lint:latest /usr/bin/golangci-lint /usr/local/bin/golangci-lint
+COPY --chown=coder:coder --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # ==========================================
-# 2. Install Baseline System Packages
+# Install Baseline System Packages
 # ==========================================
 # warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
 # hadolint ignore=DL3008
@@ -34,80 +36,118 @@ rm -f /etc/apt/sources.list.d/yarn.list
 
 apt-get update
 apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
-tzdata \
-xz-utils \
-bash-completion \
-curl \
-gnupg \
-software-properties-common \
-ripgrep \
-tree
+  tzdata \
+  xz-utils \
+  bash-completion \
+  curl \
+  gnupg \
+  software-properties-common \
+  ripgrep \
+  tree \
+  git
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
 
 # ==========================================
-# 3. Install Python from Deadsnakes PPA
+# Bake Pre-commit Template into Image
 # ==========================================
-RUN <<EORUN
-add-apt-repository ppa:deadsnakes/ppa
-apt-get update
-apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
-python3.15 \
-python3.15-venv \
-python3.15-dev
-apt-get clean
-rm -rf /var/lib/apt/lists/*
-EORUN
+RUN mkdir -p /opt/coder/templates && cat <<'EOF' > /opt/coder/templates/.pre-commit-config.yaml
+repos:
+  # General/File System
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  # Python: Ruff (Formatting & Linting)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.8
+    hooks:
+      - id: ruff
+        args: [ --fix ]
+      - id: ruff-format
+
+  # Golang: golangci-lint
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.59.0
+    hooks:
+      - id: golangci-lint
+
+  # Web/JSON/Markdown/YAML: Prettier
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
+    hooks:
+      - id: prettier
+        types_or: [javascript, typescript, css, html, json, markdown]
+
+  # Bash/Shell: shfmt & shellcheck
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.8.0-1
+    hooks:
+      - id: shfmt
+        args: ["-w", "-s", "-i", "2"] # Write, simplify, indent 2 spaces
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+
+  # Docker: Hadolint
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+EOF
+RUN chown -R coder:coder /opt/coder/templates
 
 # ==========================================
-# 4. Install PowerShell & Modules
+# Install Python & Tools using uv
 # ==========================================
+# Install Python to a global directory
+ARG UV_PYTHON_VERSION=3.14
+ENV UV_PYTHON_VERSION=${UV_PYTHON_VERSION}
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+RUN uv python install ${UV_PYTHON_VERSION}
 
-# Install PowerShell Core via apt
-# hadolint ignore=DL3008,SC1091
+# Install pre-commit globally using uv tool
+ENV UV_TOOL_DIR=/opt/uv-tools
+RUN uv tool install pre-commit --install-dir /usr/local/bin
+
+# ==========================================
+# Install PowerShell & Modules
+# ==========================================
 RUN <<"EORUN"
-# Get the version of Ubuntu and strip any quotes from the variable
 source /etc/os-release
-CLEAN_VERSION_ID="${VERSION_ID//\"/}"
-
-# Download the Microsoft repository config using curl
-# We use -f to fail immediately if the URL is incorrect (prevents bad .deb files)
+CLEAN_VERSION_ID="${VERSION_ID//"/}"
 curl -sSfL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/${CLEAN_VERSION_ID}/packages-microsoft-prod.deb"
-
-# Register the Microsoft repository keys
 dpkg -i packages-microsoft-prod.deb
 rm packages-microsoft-prod.deb
-
-# Update the list of packages and install PowerShell
 apt-get update
 apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 powershell
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 EORUN
 
-# Configure PowerShell and Install Modules
-# We use -Scope AllUsers so the 'coder' user can access them later.
 RUN pwsh -NoProfile -NonInteractive -Command - <<"EOF"
 $ErrorActionPreference = 'Stop'
 $ConfirmPreference = 'None'
-
 Write-Host "Installing NuGet package provider..."
 Install-PackageProvider -Name NuGet -Force -Scope AllUsers
-
 Write-Host "Registering and Trusting PSGallery..."
 if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
     Register-PSRepository -Default -InstallationPolicy Trusted
 } else {
     Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
 }
-
 Write-Host "Installing Modules..."
 Install-Module -Name PSScriptAnalyzer, MilestonePSTools, powershell-yaml, PSFramework -Scope AllUsers -Force
 EOF
 
 # ==========================================
-# 5. Install NVM, Node, and Tooling
+# Install NVM, Node, and Tooling
 # ==========================================
 ARG NVM_VERSION=v0.40.4
 ENV NVM_VERSION=${NVM_VERSION}
@@ -130,7 +170,7 @@ EORUN
 RUN npm install -g prettier
 
 # ==========================================
-# 6. Final Setup
+# Final Setup
 # ==========================================
 USER coder
 ENV BIN_DIR=/home/coder/.local/bin

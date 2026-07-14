@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       nvm_version: ${{ steps.get-nvm.outputs.version }}
+      python_version: ${{ steps.get-python.outputs.version }}
     steps:
       - name: Get Latest NVM Tag
         id: get-nvm
@@ -23,14 +24,28 @@ jobs:
         run: |
           # Fetch once using the pre-installed GitHub CLI
           LATEST_NVM_TAG=$(gh api repos/nvm-sh/nvm/releases/latest --jq '.tag_name')
-          
+
           if [ -z "$LATEST_NVM_TAG" ]; then
             echo "Error: Could not fetch the latest release tag for NVM from GitHub."
             exit 1
           fi
-          
+
           echo "Discovered NVM version: $LATEST_NVM_TAG"
           echo "version=$LATEST_NVM_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Get Latest Python Version
+        id: get-python
+        run: |
+          # Fetch the absolute latest stable release of Python using the endoflife.date API
+          LATEST_PYTHON_VERSION=$(curl -sL "https://endoflife.date/api/python.json" | jq -r '.[0].latest')
+
+          if [ -z "$LATEST_PYTHON_VERSION" ] || [ "$LATEST_PYTHON_VERSION" == "null" ]; then
+            echo "Error: Could not fetch the latest Python version."
+            exit 1
+          fi
+
+          echo "Discovered Python version: $LATEST_PYTHON_VERSION"
+          echo "version=$LATEST_PYTHON_VERSION" >> "$GITHUB_OUTPUT"
 
   # ==========================================
   # 2. Build Matrix Job (Runs per flavor)
@@ -43,7 +58,7 @@ jobs:
       fail-fast: false
       matrix:
         flavor: [base, desktop, node, golang]
-        
+
     # Grant permissions needed to push to GHCR
     permissions:
       contents: read
@@ -86,3 +101,4 @@ jobs:
           build-args: |
             ENV_FLAVOR=${{ matrix.flavor }}
             NVM_VERSION=${{ needs.prepare.outputs.nvm_version }}
+            UV_PYTHON_VERSION=${{ needs.prepare.outputs.python_version }}
