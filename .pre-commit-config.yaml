@@ -36,6 +36,15 @@ repos:
       - id: shfmt
         args: ["-w", "-s", "-i", "2"]
 
+  # PWSH
+  - repo: https://github.com/ophiosdev/pre-commit-psscriptanalyzer.git
+    rev: v2.0.0
+    hooks:
+      # Check PowerShell code
+      - id: psscriptanalyzer-check
+      # Format PowerShell code
+      - id: psscriptanalyzer-format
+
 # Use system shellcheck (bypasses Docker requirement)
   - repo: local
     hooks:

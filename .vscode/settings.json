@@ -22,6 +22,7 @@
     "phar",
     "phpunit",
     "pipefail",
+    "psscriptanalyzer",
     "pycache",
     "pytest",
     "shellcheck",
