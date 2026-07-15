@@ -113,7 +113,10 @@ RUN curl -fsSL -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/i
 # hadolint ignore=SC1091
 RUN <<EORUN
 . ${NVM_DIR}/nvm.sh
-nvm install --lts --latest-npm
+# Install LTS Node but pin npm to v10.x to prevent pre-commit flag crashes
+nvm install --lts
+npm install -g npm@10
+#nvm install --lts --latest-npm
 ln -s "$(nvm which current)" /usr/local/bin/node
 ln -s "$(which npm)" /usr/local/bin/npm
 EORUN
