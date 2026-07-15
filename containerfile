@@ -55,8 +55,8 @@ EORUN
 # ==========================================
 RUN mkdir -p /opt/coder/templates
 COPY --chmod=644 .pre-commit-config.yaml /opt/coder/templates/.pre-commit-config.yaml
-COPY --chmod=644 .gitignore_global /opt/coder/templates/.gitignore_global
-RUN git config --global core.excludesfile ~/.gitignore_global
+COPY --chmod=644 .gitignore_system /opt/coder/templates/.gitignore_system
+RUN git config --system core.excludesfile ~/.gitignore_global
 
 # ==========================================
 # Install Python & Tools using uv
