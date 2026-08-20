@@ -65,18 +65,24 @@ ENV UV_TOOL_BIN_DIR=/usr/local/bin
 RUN uv tool install pre-commit
 
 # ==========================================
-# Install PowerShell & Modules
+# Install PowerShell (Direct Binary Download)
 # ==========================================
-RUN <<"EORUN"
-source /etc/os-release
-CLEAN_VERSION_ID=$(echo "$VERSION_ID" | tr -d '"')
-curl -sSfL -o packages-microsoft-prod.deb "https://packages.microsoft.com/config/ubuntu/${CLEAN_VERSION_ID}/packages-microsoft-prod.deb"
-dpkg -i packages-microsoft-prod.deb
-rm packages-microsoft-prod.deb
+RUN <<EORUN
 apt-get update
-apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 powershell
+apt-get install -yqq --no-install-recommends --no-install-suggests \
+  libicu-dev \
+  libssl-dev
 apt-get clean
 rm -rf /var/lib/apt/lists/*
+
+# Fetch latest PowerShell release binary
+PWSH_URL=$(curl -s https://api.github.com/repos/PowerShell/PowerShell/releases/latest | jq -r '.assets[] | select(.name | test("linux-x64.tar.gz$")) | .browser_download_url')
+mkdir -p /opt/microsoft/powershell/7
+curl -L "${PWSH_URL}" -o /tmp/powershell.tar.gz
+tar zxf /tmp/powershell.tar.gz -C /opt/microsoft/powershell/7
+rm /tmp/powershell.tar.gz
+ln -s /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
+chmod +x /opt/microsoft/powershell/7/pwsh
 EORUN
 
 RUN pwsh -NoProfile -NonInteractive -Command - <<"EOF"

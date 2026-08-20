@@ -22,16 +22,28 @@ COPY --chown=coder:coder --from=docker.io/hashicorp/terraform:latest /bin/terraf
 
 # The base image already provides build-essential, curl, git, jq, sudo,
 # wget, python3, pipx, and Docker.
-RUN apt-get update && \
-    apt-get install --yes --no-install-recommends --no-install-suggests \
-    autoconf \
-    automake \
-    ca-certificates \
-    cmake \
-    less \
-    sqlite3 \
-    zsh \
-    && rm -rf /var/lib/apt/lists/*
+RUN <<EORUN
+# Remove the broken Yarn repo from the base image since we use NVM
+rm -f /etc/apt/sources.list.d/yarn.list
+
+apt-get update
+apt-get install -yqq --no-install-recommends --no-install-suggests -o=Dpkg::Use-Pty=0 \
+  autoconf \
+  automake \
+  bash-completion \
+  ca-certificates \
+  cmake \
+  gnupg \
+  less \
+  software-properties-common \
+  sqlite3 \
+  tree \
+  tzdata \
+  xz-utils \
+  zsh
+rm -rf /var/lib/apt/lists/*
+
+EORUN
 
 # Everything below installs into user-owned prefixes as the coder user.
 USER coder
@@ -67,7 +79,9 @@ RUN brew install \
     opentofu \
     pkgconf \
     pnpm \
+    powershell \
     rebar3 \
+    ripgrep-all \
     ruby \
     shellcheck \
     shfmt \
@@ -82,6 +96,26 @@ RUN brew install \
 # that expect java on PATH.
 ENV JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk
 ENV PATH=$PATH:$JAVA_HOME/bin
+
+################################################################################
+# Powershell
+#
+################################################################################
+
+RUN pwsh -NoProfile -NonInteractive -Command - <<"EOF"
+$ErrorActionPreference = 'Stop'
+$ConfirmPreference = 'None'
+Write-Host "Installing NuGet package provider..."
+Install-PackageProvider -Name NuGet -Force
+Write-Host "Registering and Trusting PSGallery..."
+if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+    Register-PSRepository -Default -InstallationPolicy Trusted
+} else {
+    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+}
+Write-Host "Installing Modules..."
+Install-Module -Name PSScriptAnalyzer, MilestonePSTools, powershell-yaml, PSFramework -Force
+EOF
 
 ################################################################################
 # uv                                                                           #
@@ -106,6 +140,19 @@ RUN cargo binstall cargo-nextest --secure
 ENV GOPATH=$HOME/go
 ENV GOBIN=$GOPATH/bin
 ENV PATH=$PATH:$GOBIN
+
+# Install Node Tooling
+# warning: Pin versions in npm. Instead of `npm install <package>` use `npm install <package>@<version>`
+# hadolint ignore=DL3016
+RUN npm install -g prettier
+
+# ==========================================
+# Bake Pre-commit Template into Image
+# ==========================================
+RUN mkdir -p /opt/coder/templates
+COPY --chmod=644 .pre-commit-config.yaml /opt/coder/templates/.pre-commit-config.yaml
+COPY --chmod=644 .gitignore_system /opt/coder/templates/.gitignore_system
+RUN git config --system core.excludesfile /opt/coder/templates/.gitignore_system
 
 ################################################################################
 # Sanity checks                                                                #
