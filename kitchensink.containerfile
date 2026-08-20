@@ -16,6 +16,14 @@ RUN ln -sf /usr/share/zoneinfo/America/Chicago /etc/localtime
 # ==========================================
 COPY --chown=coder:coder --from=docker.io/hashicorp/terraform:latest /bin/terraform /usr/local/bin/terraform
 
+# ==========================================
+# Bake Pre-commit Template into Image
+# ==========================================
+RUN mkdir -p /opt/coder/templates
+COPY --chmod=644 .pre-commit-config.yaml /opt/coder/templates/.pre-commit-config.yaml
+COPY --chmod=644 .gitignore_system /opt/coder/templates/.gitignore_system
+RUN git config --system core.excludesfile /opt/coder/templates/.gitignore_system
+
 ################################################################################
 # System packages                                                              #
 ################################################################################
@@ -145,14 +153,6 @@ ENV PATH=$PATH:$GOBIN
 # warning: Pin versions in npm. Instead of `npm install <package>` use `npm install <package>@<version>`
 # hadolint ignore=DL3016
 RUN npm install -g prettier
-
-# ==========================================
-# Bake Pre-commit Template into Image
-# ==========================================
-RUN mkdir -p /opt/coder/templates
-COPY --chmod=644 .pre-commit-config.yaml /opt/coder/templates/.pre-commit-config.yaml
-COPY --chmod=644 .gitignore_system /opt/coder/templates/.gitignore_system
-RUN git config --system core.excludesfile /opt/coder/templates/.gitignore_system
 
 ################################################################################
 # Sanity checks                                                                #
