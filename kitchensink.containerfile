@@ -19,8 +19,9 @@ COPY --chown=coder:coder --from=docker.io/hashicorp/terraform:latest /bin/terraf
 # ==========================================
 # Bake Pre-commit Template into Image
 # ==========================================
-RUN mkdir -p /opt/coder/templates
+RUN mkdir -p /opt/coder/templates/.github
 COPY --chmod=644 .pre-commit-config.yaml /opt/coder/templates/.pre-commit-config.yaml
+COPY --chmod=644 .github/dependabot.yaml /opt/coder/templates/.github/dependabot.yaml
 COPY --chmod=644 .gitignore_system /opt/coder/templates/.gitignore_system
 RUN git config --system core.excludesfile /opt/coder/templates/.gitignore_system
 
