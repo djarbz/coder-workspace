@@ -106,8 +106,7 @@ ENV JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk
 ENV PATH=$PATH:$JAVA_HOME/bin
 
 ################################################################################
-# Powershell
-#
+# powershell                                                                   #
 ################################################################################
 
 RUN pwsh -NoProfile -NonInteractive -Command - <<"EOF"
