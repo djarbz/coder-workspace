@@ -88,6 +88,8 @@ RUN brew install \
     pkgconf \
     pnpm \
     powershell \
+    pre-commit \
+    prettier \
     rebar3 \
     ripgrep-all \
     ruby \
@@ -147,11 +149,6 @@ RUN cargo binstall cargo-nextest --secure
 ENV GOPATH=$HOME/go
 ENV GOBIN=$GOPATH/bin
 ENV PATH=$PATH:$GOBIN
-
-# Install Node Tooling
-# warning: Pin versions in npm. Instead of `npm install <package>` use `npm install <package>@<version>`
-# hadolint ignore=DL3016
-RUN npm install -g prettier
 
 ################################################################################
 # Sanity checks                                                                #
