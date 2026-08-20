@@ -102,3 +102,49 @@ jobs:
             ENV_FLAVOR=${{ matrix.flavor }}
             NVM_VERSION=${{ needs.prepare.outputs.nvm_version }}
             UV_PYTHON_VERSION=${{ needs.prepare.outputs.python_version }}
+
+  # ==========================================
+  # 3. Build Kitchensink Job
+  # ==========================================
+  build-kitchensink:
+    name: Build & Push Kitchensink
+    needs: prepare
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=kitchensink
+            type=raw,value=kitchensink-latest
+            type=sha,prefix=kitchensink-
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: kitchensink.containerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
